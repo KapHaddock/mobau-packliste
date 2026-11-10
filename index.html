@@ -104,7 +104,7 @@ async function toPL(){
     ws.getRange(`A21:V${19+need}`).clear("Contents"); await c.sync();
     sel.forEach((o,i)=>{const r=21+3*i,v=o.v;
       const put=(a,x,f)=>{if(x===""||x==null)return;const g=ws.getRange(a);if(f)g.numberFormat=[[f]];g.values=[[x]];};
-      put("A"+r,i+1); put("B"+r,s(v[1]),"@"); put("B"+(r+1),`${s(v[2])}/${s(v[3])}/${s(v[4])}`,"@");
+      put("A"+r,v[3]); put("B"+r,s(v[1]),"@"); const q=r+1; put("B"+q,s(v[2]),"@"); put("C"+q,"/"); put("D"+q,v[3]); put("E"+q,"/"); put("F"+q,s(v[4]),"@");
       put("G"+r,v[5]);
       if(Number(v[10])>0&&Number(v[11])>0&&Number(v[12])>0){put("H"+r,v[10]);put("I"+r,"x");put("J"+r,v[11]);put("K"+r,"x");put("L"+r,v[12]);}
       if(Number(v[13])>0)put("M"+r,v[13],"0.000");
