@@ -101,7 +101,7 @@ async function toPL(){
     const ws=c.workbook.worksheets.getItem(PL), t=c.workbook.names.getItem("PL_Summe").getRange(); t.load("rowIndex"); await c.sync();
     const tr=t.rowIndex+1, need=Math.max(20,3*sel.length+2);
     await resize(c,ws,tr,21,tr-21,need,tr-2,36,"V",tr-3);
-    ws.getRange(`A21:V${20+need}`).clear("Contents"); await c.sync();
+    ws.getRange(`A21:V${19+need}`).clear("Contents"); await c.sync();
     sel.forEach((o,i)=>{const r=21+3*i,v=o.v;
       const put=(a,x,f)=>{if(x===""||x==null)return;const g=ws.getRange(a);if(f)g.numberFormat=[[f]];g.values=[[x]];};
       put("A"+r,i+1); put("B"+r,s(v[1]),"@"); put("B"+(r+1),`${s(v[2])}/${s(v[3])}/${s(v[4])}`,"@");
