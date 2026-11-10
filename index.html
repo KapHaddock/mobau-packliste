@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Packliste und Rechnung</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<style>
+:root{--ac:#1f4e79;--bd:#d0d5dd;--bg:#f5f7fa}
+*{box-sizing:border-box}body{margin:0;font:13px/1.4 "Segoe UI",Arial,sans-serif;color:#222;background:#fff}
+header{text-align:center;padding:14px 12px 8px}#logo{max-width:200px;max-height:70px}#logoTxt{font:700 20px Arial;color:var(--ac);letter-spacing:1px}
+.lk{display:block;margin:4px auto 0;background:none;border:0;color:#666;font-size:11px;text-decoration:underline;cursor:pointer}
+.desc{text-align:center;color:#555;margin:6px 14px 18px}main{padding:0 14px 20px}
+label{font-weight:600;display:block;margin:0 0 4px}select,input[type=text]{width:100%;padding:7px;border:1px solid var(--bd);border-radius:4px;font:inherit}
+h3{margin:20px 0 6px;font-size:13px;color:var(--ac)}
+.box{border:1px solid var(--bd);border-radius:4px;max-height:260px;overflow:auto;background:var(--bg);min-height:40px}
+table{width:100%;border-collapse:collapse}th,td{padding:5px 6px;border-bottom:1px solid var(--bd);text-align:left}th{position:sticky;top:0;background:#e6ebf1}
+td.n,th.n{text-align:right}td.c,th.c{text-align:center;width:34px}.em{padding:10px;color:#777}
+.row{display:flex;gap:8px;margin-top:14px}button.b{flex:1;padding:9px;border:0;border-radius:4px;background:var(--ac);color:#fff;font:600 13px inherit;cursor:pointer}
+button.b.g{background:#fff;color:var(--ac);border:1px solid var(--ac)}button.b:disabled{opacity:.4;cursor:default}
+#st{margin-top:10px;min-height:18px}.ok{color:#17703a}.er{color:#b42318}
+#ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center;padding:16px}
+#dl{background:#fff;border-radius:6px;padding:18px;width:100%;max-width:340px}#dl h4{margin:0 0 8px;font-size:15px}
+</style></head><body>
+<header><img id="logo" alt="" hidden><div id="logoTxt">MOBAU BRAUN</div>
+<button class="lk" id="lkBtn">Logo einfügen / ändern</button><input type="file" id="lkIn" accept="image/*" hidden></header>
+<p class="desc">Wählen Sie einen Auftrag und übernehmen Sie die benötigten Artikel mit wenigen Klicks in die Packliste oder die Rechnung.</p>
+<main>
+<label for="auf">Auftragsnr.</label><select id="auf"><option value="">– bitte wählen –</option></select>
+<h3>Gefundene Artikel</h3>
+<div class="box" id="box"><div class="em">Bitte zuerst eine Auftragsnummer wählen.</div></div>
+<div class="row"><button class="b" id="bPL" disabled>Übernehmen</button><button class="b g" id="bRE" disabled>In Rechnung übernehmen</button></div>
+<div id="st"></div></main>
+<div id="ov"><div id="dl"></div></div>
+<script>
+const $=id=>document.getElementById(id), s=v=>v==null?"":String(v).trim();
+const PL="Packliste (2)", RE="Rechnung", DS="Datenquelle";
+let DATA=[], CUR=[];
+const fmt=(v,d)=>v===""||v==null||isNaN(v)?"":Number(v).toLocaleString("de-DE",{minimumFractionDigits:d,maximumFractionDigits:d});
+function status(t,err){const e=$("st");e.textContent=t;e.className=err?"er":"ok";}
+
+Office.onReady(async()=>{
+  initLogo();
+  $("auf").onchange=showItems; $("bPL").onclick=toPL; $("bRE").onclick=startRE;
+  await loadData();
+});
+
+/* ---------- Logo ---------- */
+function setLogo(src){const i=$("logo");i.src=src;i.hidden=false;$("logoTxt").hidden=true;}
+function initLogo(){
+  const st=Office.context.document.settings.get("logo");
+  if(st) setLogo(st); else {const i=$("logo");i.onload=()=>{i.hidden=false;$("logoTxt").hidden=true;};i.src="logo.png";}
+  $("lkBtn").onclick=()=>$("lkIn").click();
+  $("lkIn").onchange=e=>{
+    const f=e.target.files[0]; if(!f)return; const rd=new FileReader();
+    rd.onload=()=>{const im=new Image();im.onload=()=>{
+      const k=Math.min(1,400/im.width),cv=document.createElement("canvas");cv.width=im.width*k;cv.height=im.height*k;
+      cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);const d=cv.toDataURL("image/png");
+      setLogo(d);Office.context.document.settings.set("logo",d);Office.context.document.settings.saveAsync();};im.src=rd.result;};
+    rd.readAsDataURL(f);
+  };
+}
+
+/* ---------- Daten ---------- */
+async function loadData(){
+  try{
+    await Excel.run(async c=>{
+      const r=c.workbook.worksheets.getItem(DS).getRange("A3:T500"); r.load("values"); await c.sync();
+      DATA=r.values.map((v,i)=>({row:i+3,v})).filter(o=>s(o.v[0])!=="");
+    });
+    const u=[...new Set(DATA.map(o=>s(o.v[0])))], sel=$("auf");
+    u.forEach(x=>{const o=document.createElement("option");o.value=o.textContent=x;sel.appendChild(o);});
+  }catch(e){status("Datenquelle konnte nicht gelesen werden: "+e.message,1);}
+}
+function showItems(){
+  const a=$("auf").value; CUR=DATA.filter(o=>s(o.v[0])===a); const b=$("box");
+  $("bPL").disabled=$("bRE").disabled=true; $("st").textContent="";
+  if(!a){b.innerHTML='<div class="em">Bitte zuerst eine Auftragsnummer wählen.</div>';return;}
+  let h='<table><tr><th>Inhalt</th><th class="n">Menge (Stk)</th><th class="n">Kubage (m³)</th><th class="n">Netto (kg)</th><th class="c"><input type="checkbox" id="all" title="Alle"></th></tr>';
+  CUR.forEach((o,i)=>{const v=o.v;h+=`<tr><td>${esc(s(v[8]))}</td><td class="n">${fmt(v[6],0)}</td><td class="n">${Number(v[13])>0?fmt(v[13],3):""}</td><td class="n">${fmt(v[15],0)}</td><td class="c"><input type="checkbox" class="ck" data-i="${i}"></td></tr>`;});
+  b.innerHTML=h+"</table>";
+  const upd=()=>{$("bPL").disabled=$("bRE").disabled=!picked().length;};
+  b.querySelectorAll(".ck").forEach(x=>x.onchange=upd);
+  $("all").onchange=e=>{b.querySelectorAll(".ck").forEach(x=>x.checked=e.target.checked);upd();};
+}
+const esc=t=>t.replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));
+const picked=()=>[...document.querySelectorAll(".ck:checked")].map(x=>CUR[+x.dataset.i]);
+
+/* ---------- Zeilenanzahl anpassen ---------- */
+async function resize(c,ws,total,first,cap,need,insAt,fmtRows,lastCol,delEnd){
+  const diff=need-cap;
+  if(diff>0){
+    ws.getRange(`${insAt}:${insAt+diff-1}`).insert("Down"); await c.sync();
+    for(let j=0;j<diff;j++){const x=insAt+j,src=fmtRows+j%3;
+      ws.getRange(`A${x}:${lastCol}${x}`).copyFrom(`A${src}:${lastCol}${src}`,"Formats"); ws.getRange(`${x}:${x}`).format.rowHeight=12.75;}
+  }else if(diff<0){ws.getRange(`${delEnd+diff+1}:${delEnd}`).delete("Up");}
+  await c.sync();
+}
+
+/* ---------- Packliste ---------- */
+async function toPL(){
+  const sel=picked(); if(!sel.length){status("Bitte mindestens einen Artikel ankreuzen.",1);return;}
+  try{await Excel.run(async c=>{
+    const ws=c.workbook.worksheets.getItem(PL), t=c.workbook.names.getItem("PL_Summe").getRange(); t.load("rowIndex"); await c.sync();
+    const tr=t.rowIndex+1, need=Math.max(20,3*sel.length+2);
+    await resize(c,ws,tr,21,tr-21,need,tr-2,36,"V",tr-3);
+    ws.getRange(`A21:V${20+need}`).clear("Contents"); await c.sync();
+    sel.forEach((o,i)=>{const r=21+3*i,v=o.v;
+      const put=(a,x,f)=>{if(x===""||x==null)return;const g=ws.getRange(a);if(f)g.numberFormat=[[f]];g.values=[[x]];};
+      put("A"+r,i+1); put("B"+r,s(v[1]),"@"); put("B"+(r+1),`${s(v[2])}/${s(v[3])}/${s(v[4])}`,"@");
+      put("G"+r,v[5]);
+      if(Number(v[10])>0&&Number(v[11])>0&&Number(v[12])>0){put("H"+r,v[10]);put("I"+r,"x");put("J"+r,v[11]);put("K"+r,"x");put("L"+r,v[12]);}
+      if(Number(v[13])>0)put("M"+r,v[13],"0.000");
+      put("N"+r,v[14]);put("O"+r,v[15]);put("P"+r,v[6]);put("Q"+r,s(v[7]));put("S"+r,s(v[8]));put("V"+r,s(v[16]),"@");});
+    const d=ws.getRange("D13");d.numberFormat=[["@"]];d.values=[[s(sel[0].v[0])]];
+    ws.activate(); await c.sync();
+  });status(`✓ ${sel.length} Artikel in die Packliste übernommen.`);}
+  catch(e){status("Fehler: "+e.message,1);}
+}
+
+/* ---------- Rechnung ---------- */
+function dialog(title,text,input,btns){
+  $("dl").innerHTML=`<h4>${title}</h4><div>${text}</div>${input?'<input type="text" id="dIn" style="margin-top:10px" placeholder="Rechnungsnummer">':""}<div class="row" id="dB"></div>`;
+  btns.forEach(b=>{const e=document.createElement("button");e.className="b"+(b.g?" g":"");e.textContent=b.t;e.onclick=()=>b.f($("dIn")?.value.trim());$("dB").appendChild(e);});
+  $("ov").style.display="flex";
+}
+const closeD=()=>$("ov").style.display="none";
+function startRE(){
+  const sel=picked(); if(!sel.length)return;
+  const nums=[...new Set(sel.map(o=>s(o.v[18])).filter(x=>x))], empty=sel.some(o=>!s(o.v[18]));
+  const askEmpty=()=>dialog("Rechnungsnummer fehlt","Für mindestens einen gewählten Artikel ist in der Datenquelle keine Rechnungsnummer eingetragen. Sie können sie hier nachtragen:",true,[
+    {t:"Ignorieren",g:1,f:()=>{closeD();toRE(nums[0]||"",null);}},
+    {t:"Übernehmen",f:n=>{if(!n){$("dIn").style.borderColor="#b42318";return;}closeD();toRE(nums[0]||n,n);}}]);
+  const go=()=>empty?askEmpty():toRE(nums[0]||"",null);
+  if(nums.length>1) dialog("Verschiedene Rechnungsnummern","Die gewählten Artikel haben unterschiedliche Rechnungsnummern:<br><b>"+nums.map(esc).join("<br>")+"</b><br>Es wird <b>"+esc(nums[0])+"</b> verwendet. Fortfahren?",false,[
+    {t:"Abbrechen",g:1,f:closeD},{t:"Fortfahren",f:()=>{closeD();go();}}]);
+  else go();
+}
+async function toRE(inv,newNr){
+  const sel=picked(), g=new Map();
+  sel.forEach(o=>{const v=o.v,k=[s(v[7]),s(v[8]),v[9]].join("|"),e=g.get(k)||{en:s(v[7]),de:s(v[8]),p:v[9],q:0};e.q+=Number(v[6])||0;g.set(k,e);});
+  const L=[...g.values()];
+  try{await Excel.run(async c=>{
+    const ws=c.workbook.worksheets.getItem(RE), t=c.workbook.names.getItem("RE_Summe").getRange(); t.load("rowIndex"); await c.sync();
+    const tr=t.rowIndex+1, need=Math.max(15,3*L.length);
+    await resize(c,ws,tr,22,tr-22,need,tr-3,22,"G",tr-1);
+    const last=21+need;
+    for(const col of["A","B","F","G"])ws.getRange(`${col}22:${col}${last}`).clear("Contents");
+    for(let r=23;r<=last;r+=3)ws.getRange(`C${r}:C${r+1}`).clear("Contents");
+    await c.sync();
+    L.forEach((e,i)=>{const r=23+3*i;
+      ws.getRange("A"+r).values=[[e.q]];ws.getRange("B"+r).values=[["Stück"]];ws.getRange("C"+r).values=[[e.en]];
+      if(e.p!=="")ws.getRange("F"+r).values=[[e.p]];ws.getRange("G"+r).formulas=[[`=F${r}*A${r}`]];
+      ws.getRange("B"+(r+1)).values=[["PE 0"]];ws.getRange("C"+(r+1)).values=[[e.de]];});
+    ws.getRange("C14").values=[[inv]];ws.getRange("C16").values=[[s(sel[0].v[0]).replace(/\s*\/\s*/g,"/")]];
+    if(newNr){const ds=c.workbook.worksheets.getItem(DS);
+      sel.forEach(o=>{if(!s(o.v[18])){ds.getRange("S"+o.row).values=[[newNr]];o.v[18]=newNr;}});}
+    ws.activate();await c.sync();
+  });
+  $("dl").innerHTML='<h4>Daten erfolgreich übernommen</h4><div>Die Rechnung wurde befüllt.</div><div class="row"><button class="b" id="cl">Schließen</button></div>';
+  $("ov").style.display="flex";
+  $("cl").onclick=()=>{closeD();$("auf").value="";showItems();try{Office.addin.hide();}catch(x){}};
+  }catch(e){status("Fehler: "+e.message,1);}
+}
+</script></body></html>
